@@ -12,14 +12,38 @@ static NSString *const CHANNEL_NAME = @"open_file";
     UIDocumentInteractionController *_interactionController;
 }
 
++ (UIWindow *)mainWindow {
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene* windowScene in [UIApplication sharedApplication].connectedScenes) {
+            if (windowScene.activationState == UISceneActivationStateForegroundActive) {
+                return windowScene.windows.firstObject;
+            }
+        }
+        // If a window has not been returned by now, the first scene's window is returned (regardless of activationState).
+        UIWindowScene *windowScene = (UIWindowScene *)[[UIApplication sharedApplication].connectedScenes allObjects].firstObject;
+        return windowScene.windows.firstObject;
+    } else {
+        return [[[UIApplication sharedApplication] delegate] window];
+    }
+}
+
+
++ (UIViewController *)findRootViewController {
+    return [self mainWindow].rootViewController;
+}
+
+
 + (void)registerWithRegistrar:(NSObject<FlutterPluginRegistrar>*)registrar {
     FlutterMethodChannel* channel = [FlutterMethodChannel
-                                     methodChannelWithName:CHANNEL_NAME
-                                     binaryMessenger:[registrar messenger]];
-    UIViewController *viewController =
-    [UIApplication sharedApplication].delegate.window.rootViewController;
-    OpenFilePlugin* instance = [[OpenFilePlugin alloc] initWithViewController:viewController];
-    [registrar addMethodCallDelegate:instance channel:channel];
+            methodChannelWithName:CHANNEL_NAME
+                  binaryMessenger:[registrar messenger]];
+    // UIViewController *viewController =
+    //[UIApplication sharedApplication].delegate.window.rootViewController;
+    UIViewController *viewController = [self findRootViewController];
+    if (viewController) {
+        OpenFilePlugin* instance = [[OpenFilePlugin alloc] initWithViewController:viewController];
+        [registrar addMethodCallDelegate:instance channel:channel];
+    }
 }
 
 - (instancetype)initWithViewController:(UIViewController *)viewController {
@@ -53,13 +77,16 @@ static NSString *const CHANNEL_NAME = @"open_file";
                     [self openFileWithUIActivityViewController:fileURL];
                 }else{
                     BOOL previewSucceeded = [_documentController presentPreviewAnimated:YES];
+                    if (@available(iOS 18.0, *)) {
+                        sleep(1);
+                    }
                     if(!previewSucceeded){
                         //                    [_documentController presentOpenInMenuFromRect:CGRectMake(500,20,100,100) inView:[UIApplication sharedApplication].delegate.window.rootViewController.view animated:YES];
-                        
+
                         [self openFileWithUIActivityViewController:fileURL];
                     }
                 }
-                
+
             }@catch (NSException *exception) {
                 NSString * json = [self getJson:@"File opened incorrectly。" type:@-4];
                 result(json);
@@ -75,13 +102,13 @@ static NSString *const CHANNEL_NAME = @"open_file";
 
 - (void)openFileWithUIActivityViewController:(NSURL *)fileURL{
     UIActivityViewController *activityViewController = [[UIActivityViewController alloc] initWithActivityItems:@[fileURL] applicationActivities:nil];
-    
+
     if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
         activityViewController.popoverPresentationController.sourceView = _viewController.view;
         activityViewController.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(_viewController.view.bounds), CGRectGetMidY(_viewController.view.bounds), 0, 0);
         activityViewController.popoverPresentationController.permittedArrowDirections = UIPopoverArrowDirectionAny;
     }
-    
+
     [_viewController presentViewController:activityViewController animated:YES completion:^{ [self doneEnd];}];
 }
 
@@ -114,7 +141,7 @@ static NSString *const CHANNEL_NAME = @"open_file";
     NSDictionary * dict = @{@"message":message, @"type":type};
     NSData * jsonData = [NSJSONSerialization dataWithJSONObject:dict options:NSJSONWritingPrettyPrinted error:nil];
     NSString * json = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
-    
+
     return json;
 }
 
